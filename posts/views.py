@@ -41,8 +41,10 @@ def new_post(request):
 def profile(request, username):
     author = get_object_or_404(get_user_model(), username=username)
     posts = author.posts.all()
+    following = True if request.user.follower.filter(author=author) else False
     template = 'profile.html'
     context = {
+        'following': following,
         'author': author,
     }
     return paginator_render(request, template, context, posts)

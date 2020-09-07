@@ -5,12 +5,12 @@
 
     {% include 'include/menu.html' with index=True %}
 
-    {% load cache %}
-    {% cache 20 index_page %}
+<!--    {% load cache %}
+    {% cache 20 index_page %}-->
         {% for post in page %}
             {% include 'include/post_item.html' with post=post %}
         {% endfor %}
-    {% endcache %}
+<!--    {% endcache %}-->
 
     {% if page.has_other_pages %}
         {% include "include/paginator.html" with items=page paginator=paginator %}
