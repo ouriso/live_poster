@@ -3,7 +3,7 @@ from django.shortcuts import get_object_or_404
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from .models import Group, Post
+from .models import Comment, Group, Post
 
 User = get_user_model()
 
@@ -12,14 +12,14 @@ class TestPosts(TestCase):
     def setUp(self):
         self.client = Client()
         self.client2 = Client()
-        user = User.objects.create_user(
+        self.user = User.objects.create_user(
             first_name='Jerry',
             last_name='Mouse',
             username='jerry',
             email='jerry@disney.com',
             password='A12345a!'
         )
-        self.client.force_login(user)
+        self.client.force_login(self.user)
         self.group = Group.objects.create(
             title='Cats',
             slug='cats',
@@ -43,7 +43,7 @@ class TestPosts(TestCase):
         response = self.client.get(reverse('profile', args=('jerry',)))
         self.assertEqual(response.status_code, 200)
 
-    def test_auth(self):
+    def test_post_auth(self):
         response = self.create_post(self.client)
         post = Post.objects.get(
             pk=1,
@@ -52,7 +52,7 @@ class TestPosts(TestCase):
         )
         self.assertTrue(post)
 
-    def test_not_auth(self):
+    def test_post_not_auth(self):
         posts_before = Post.objects.all().count()
         response = self.create_post(self.client2)
         posts_after = Post.objects.all().count()
@@ -91,6 +91,40 @@ class TestPosts(TestCase):
         url = reverse('post_edit', args=('jerry', 1,))
         post_upd = self.client.post(url, self.context2)
         self.response_asserts('antirats', self.context2)
+
+    def test_comments_auth(self):
+        user2 = User.objects.create(
+            first_name='Tom',
+            last_name='Cat',
+            username='tom',
+            email='tom@disney.com',
+            password='A12345a!'
+        )
+        post = Post.objects.create(
+            text=self.context['text'],
+            author=User.objects.get(username='jerry'),
+            group=self.group
+        )
+        self.client2.force_login(user2)
+        arg=(self.user.username, post.pk)
+        url = reverse('add_comment', args=arg)
+        self.client2.post(url, {'text': self.context2['text']})
+        response = self.client2.get(reverse('post', args=arg))
+        post_template = response.context['page'][0]
+        self.assertEqual(post_template.text, self.context2['text'])
+
+    def test_comments_not_auth(self):
+        post = Post.objects.create(
+            text=self.context['text'],
+            author=User.objects.get(username='jerry'),
+            group=self.group
+        )
+        url = reverse('add_comment', args=(self.user.username, post.pk))
+        with self.assertRaises(ValueError):
+            self.client2.post(url, {'text': self.context2['text']})
+
+    def test_cache(self):
+        pass
 
     def create_post(self, client):
         return client.post(reverse('new_post'), self.context, follow=True)
