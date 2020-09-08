@@ -44,7 +44,6 @@ urlpatterns = [
     path('about/', include('django.contrib.flatpages.urls')),
     path('auth/', include('users.urls')),
     path('auth/', include('django.contrib.auth.urls')),
-    path('', include('profiles.urls')),
     path('', include('posts.urls')),
 ]
 

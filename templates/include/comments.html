@@ -19,22 +19,20 @@
 </div>
 {% endif %}
 
-{% for post in page %}
+{% for comment in page %}
     <div class="media mb-4">
         <div class="media-body">
             <h5 class="mt-0">
             <a
-                href="{% url 'profile' post.author.username %}"
-                name="comment_{{ post.id }}"
-                >{{ post.author.username }}</a>
+                href="{% url 'profile' comment.author.username %}"
+                name="comment_{{ comment.id }}"
+                >{{ comment.author.username }}</a>
             </h5>
-            <p>{{ post.text|linebreaksbr }}</p>
+            <p>{{ comment.text|linebreaksbr }}</p>
         </div>
-        <small class="text-muted">{{ post.created|date:"d E Y г. G:i" }}</small>
+        <small class="text-muted">{{ comment.created|date:"d E Y г. G:i" }}</small>
     </div>
     {% if not forloop.last %}<hr>{% endif %}
-{% empty %}
-    <p>Комментариев пока нет</p>
 {% endfor %}
 
 {% if page.has_other_pages %}

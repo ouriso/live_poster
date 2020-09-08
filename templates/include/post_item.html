@@ -1,3 +1,4 @@
+{% load user_filters %}
 <div class="card mb-3 mt-1 shadow-sm">
     
     <!-- Отображение картинки -->
@@ -27,7 +28,7 @@
             <div class="btn-group ">
                 <a class="btn btn-sm text-muted" href="{% url 'post' post.author.username post.id %}" role="button">
                     {% if post.comments.exists %}
-                        {{ post.comments.count }} комментариев
+                        {{ post.comments.count|comments_numb }}
                     {% else%}
                         Добавить комментарий
                     {% endif %}

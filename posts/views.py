@@ -7,7 +7,10 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .forms import CommentForm, PostForm
-from .models import Group, Post
+from .models import Follow, Group, Post
+
+
+User = get_user_model()
 
 
 def index(request):
@@ -41,7 +44,9 @@ def new_post(request):
 def profile(request, username):
     author = get_object_or_404(get_user_model(), username=username)
     posts = author.posts.all()
-    following = True if request.user.follower.filter(author=author) else False
+    following = False
+    if request.user.is_authenticated:
+        following = True if request.user.follower.filter(author=author) else False
     template = 'profile.html'
     context = {
         'following': following,
@@ -53,14 +58,11 @@ def profile(request, username):
 def post_view(request, username, post_id):
     post = get_object_or_404(Post, author__username=username, pk=post_id)
     comments = post.comments.all()
-    posts_count = post.author.posts.count()
-    url = reverse(
-        'post', kwargs={'username': username, 'post_id': post_id}
-    )
     form = CommentForm(request.POST)
     context = {
         'post': post,
         'form': form,
+        'comments': comments,
     }
     return paginator_render(request, 'post.html', context, comments)
 
@@ -90,11 +92,12 @@ def post_edit(request, username, post_id):
     return render(request, 'new.html', context)
 
 
+@login_required
 def add_comment(request, username, post_id):
+    url = reverse('post', args=(username, post_id))
+    if not request.POST:
+        return redirect(url)
     post = get_object_or_404(Post, author__username=username, pk=post_id)
-    url = reverse(
-        'post', kwargs={'username': username, 'post_id': post_id}
-    )
     form = CommentForm(request.POST)
     context = {'form': form}
     if form.is_valid():
@@ -103,7 +106,33 @@ def add_comment(request, username, post_id):
         form_commit.author = request.user
         form_commit.save()
         return redirect(url)
-    return render(request, 'comments.html', context)
+    return render(request, 'post.html', context)
+
+
+@login_required
+def follow_index(request):
+    subscriptions = request.user.follower.values('author')
+    posts = Post.objects.filter(author__in=subscriptions).distinct()
+    return paginator_render(request, 'follow.html', {}, posts)
+
+
+@login_required
+def profile_follow(request, username):
+    follower = request.user
+    following = get_object_or_404(User, username=username)
+    object_exists = Follow.objects.filter(user=follower, author=following)
+    if not username == follower.username and not object_exists:
+        Follow.objects.create(user=follower, author=following)
+    return redirect(reverse('profile', args=(username,)))
+
+
+@login_required
+def profile_unfollow(request, username):
+    follower = request.user
+    following = get_object_or_404(User, username=username)
+    object_exists = Follow.objects.filter(user=follower, author=following)
+    object_exists.delete()
+    return redirect(reverse('profile', args=(username,)))
 
 
 def paginator_render(request, template, context, queryset, num_items=10):
