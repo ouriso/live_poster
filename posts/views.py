@@ -31,7 +31,10 @@ def new_post(request):
         context['form'] = PostForm()
         return render(request, 'new.html', context)
 
-    form = PostForm(request.POST)
+    form = PostForm(
+        request.POST or None,
+        files=request.FILES or None,
+    )
     context['form'] = form
     if form.is_valid():
         form_commit = form.save(commit=False)

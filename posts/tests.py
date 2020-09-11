@@ -1,6 +1,6 @@
-import time
-
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.shortcuts import get_object_or_404
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -105,19 +105,9 @@ class TestPosts(TestCase):
             self.assertEqual(post_template.text, context['text'])
             self.assertEqual(post_template.group.pk, context['group'])
 
-    def test_img_post(self):
-        with open('media/posts/file.jpg','rb') as img: 
-            post = self.client.post(
-                reverse('new_post'),
-                {'author': self.user, 'text': 'post with image', 'image': img}
-            )
-        arg=(self.user.username, 1)
-        response = self.client.get(reverse('post', args=arg)).context[0]
-        self.assertTrue(response['post'].image)
-
     def test_comments_auth(self):
         post = self.create_post(self.client)
-        arg=(self.user.username, 1)
+        arg = (self.user.username, 1)
         url = reverse('add_comment', args=arg)
         self.client.post(url, {'text': self.context2['text']})
         response = self.client.get(reverse('post', args=arg))
@@ -126,39 +116,90 @@ class TestPosts(TestCase):
 
     def test_comments_not_auth(self):
         post = self.create_post(self.client)
-        arg=(self.user.username, 1)
+        arg = (self.user.username, 1)
         url = reverse('add_comment', args=arg)
         comment = self.client2.post(url, {'text': self.context2['text']})
         self.assertFalse(Comment.objects.all().exists())
 
     def test_cache_index(self):
-        self.create_post(self.client)
-        response_1 = self.client.get(reverse('index')).context['page'][0]
-        self.create_posts()
-        time.sleep(11)
-        response_2 = self.client.get(reverse('index')).context['page'][0]
-        self.assertEqual(response_1.text, response_2.text)
-        self.assertEqual(response_1.group, response_2.group)
-        self.assertEqual(response_1.pub_date, response_2.pub_date)
-        time.sleep(11) 
-        response_2 = self.client.get(reverse('index')).context[0] 
-        self.assertNotEqual(response_1.text, response_2.text) 
-        self.assertNotEqual(response_1.group, response_2.group) 
-        self.assertNotEqual(response_1.pub_date, response_2.pub_date)
-
-    def create_posts(self): 
-        user2 = User.objects.create(
-            first_name='Rex',
-            last_name='Dog',
-            username='rex',
-            email='rex@disney.com',
-            password='A12345a!'
+        response_1 = self.client.get(reverse('index')).content
+        post = Post.objects.create(
+            text='First', group=self.group, author=self.user
         )
-        post = Post.objects.create(text='First', group=self.group, author=user2) 
-        post = Post.objects.create(text='Second', author=user2)
+        response_2 = self.client.get(reverse('index')).content
+        self.assertEqual(response_1, response_2)
+        cache.clear()
+        response_3 = self.client.get(reverse('index')).content
+        self.assertNotEqual(response_1, response_3)
 
     def create_post(self, client):
         return client.post(reverse('new_post'), self.context, follow=True)
+
+
+class TestImages(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            first_name='Jerry',
+            last_name='Mouse',
+            username='jerry',
+            email='jerry@disney.com',
+            password='A12345a!'
+        )
+        self.client.force_login(self.user)
+        self.group = Group.objects.create(
+            title='Cats',
+            slug='cats',
+            description='Only for cats'
+        )
+        self.small_gif = (
+            b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04'
+            b'\x01\x0a\x00\x01\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02'
+            b'\x02\x4c\x01\x00\x3b'
+        )
+        self.uploaded = SimpleUploadedFile(
+            'small.gif', self.small_gif, content_type='image/gif'
+        )
+
+    def test_img_post(self):
+        post = self.client.post(
+            reverse('new_post'),
+            {'text': 'post with image', 'image': self.uploaded}
+        )
+        arg = (self.user.username, 1)
+        response = self.client.get(reverse('post', args=arg))
+        self.assertContains(response, '<img class="card-img"')
+
+    def test_img_pages(self):
+        post = Post.objects.create(
+            author=self.user,
+            text='post with image',
+            group=self.group,
+            image=self.uploaded
+        )
+        links = (
+            reverse('index'),
+            reverse('group', args=(post.group.slug,)),
+            reverse('profile', args=(post.author.username,)),
+        )
+        for link in links:
+            response = self.client.get(link)
+            self.assertContains(response, '<img class="card-img"')
+
+    def test_img_wrong(self):
+        uploaded = SimpleUploadedFile(
+            'small.txt', self.small_gif, content_type='text/txt'
+        )
+        post = self.client.post(
+            reverse('new_post'), {
+                'text': 'post with image',
+                'image': uploaded,
+            }
+        )
+        self.assertFalse(Post.objects.all().exists())
+
+    def tearDown(self):
+        Post.objects.all().delete()
 
 
 class TestFollows(TestCase):

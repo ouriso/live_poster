@@ -2,9 +2,9 @@
 {% block title %}Избранные авторы{% endblock %}
 {% block header %}Последние обновления избранных авторов{% endblock %}
 {% block content %}
-{% load cache %}
-    {% include 'include/menu.html' with index=True %}
 
+    {% include 'include/menu.html' with index=True %}
+    {% load cache %}
     {% cache 20 follow_page page %}
         {% for post in page %}
             {% include 'include/post_item.html' with post=post %}
