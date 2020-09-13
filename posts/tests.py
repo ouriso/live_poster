@@ -33,11 +33,11 @@ class TestPosts(TestCase):
             description='For rats haters'
         )
         self.context = {
-            'group': self.group.pk,
+            'group_pk': self.group.pk,
             'text': 'Lets go!',
         }
         self.context2 = {
-            'group': self.group2.pk,
+            'group_pk': self.group2.pk,
             'text': 'Ohhhh, nooooo!',
         }
 
@@ -50,7 +50,7 @@ class TestPosts(TestCase):
         post = Post.objects.get(
             pk=1,
             text=self.context['text'],
-            group=self.context['group']
+            group=self.context['group_pk']
         )
         self.assertTrue(post)
 
@@ -86,7 +86,7 @@ class TestPosts(TestCase):
         post_upd = self.client2.post(url, self.context2)
         post = Post.objects.get(pk=1)
         self.assertEqual(post.text, self.context['text'])
-        self.assertEqual(post.group.pk, self.context['group'])
+        self.assertEqual(post.group.pk, self.context['group_pk'])
 
     def test_post_edit(self):
         post = self.create_post(self.client)
@@ -103,16 +103,16 @@ class TestPosts(TestCase):
         for response in responses:
             post_template = response.context['page'][0]
             self.assertEqual(post_template.text, context['text'])
-            self.assertEqual(post_template.group.pk, context['group'])
+            self.assertEqual(post_template.group.pk, context['group_pk'])
 
     def test_comments_auth(self):
         post = self.create_post(self.client)
         arg = (self.user.username, 1)
         url = reverse('add_comment', args=arg)
-        self.client.post(url, {'text': self.context2['text']})
-        response = self.client.get(reverse('post', args=arg))
-        post_template = response.context['page'][0]
-        self.assertEqual(post_template.text, self.context2['text'])
+        text = 'You shall not pass!!!'
+        response = self.client.post(url, {'text': text})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Comment.objects.exists())
 
     def test_comments_not_auth(self):
         post = self.create_post(self.client)
@@ -121,16 +121,35 @@ class TestPosts(TestCase):
         comment = self.client2.post(url, {'text': self.context2['text']})
         self.assertFalse(Comment.objects.all().exists())
 
+    def test_comments_on_page(self):
+        post = Post.objects.create(
+            text=self.context['text'],
+            author=self.user,
+            group=self.group
+        )
+        text = 'You shall not pass!!!'
+        Comment.objects.create(
+            text=text,
+            author=self.user,
+            post=post
+        )
+        arg = (self.user.username, 1)
+        response = self.client.get(reverse('post', args=arg))
+        self.assertEqual(response.status_code, 200)
+        post_template = response.context['page'][0]
+        self.assertEqual(post_template.text, text)
+
     def test_cache_index(self):
-        response_1 = self.client.get(reverse('index')).content
+        response_1 = self.client.get(reverse('index'))
         post = Post.objects.create(
             text='First', group=self.group, author=self.user
         )
-        response_2 = self.client.get(reverse('index')).content
-        self.assertEqual(response_1, response_2)
+        response_2 = self.client.get(reverse('index'))
+        self.assertEqual(response_1.content, response_2.content)
         cache.clear()
-        response_3 = self.client.get(reverse('index')).content
-        self.assertNotEqual(response_1, response_3)
+        response_3 = self.client.get(reverse('index'))
+        self.assertNotEqual(response_1.content, response_3.content)
+        self.assertEqual(response_3.context['page'][0].text, 'First')
 
     def create_post(self, client):
         return client.post(reverse('new_post'), self.context, follow=True)
@@ -196,6 +215,8 @@ class TestImages(TestCase):
                 'image': uploaded,
             }
         )
+        form = post.context['form']
+        self.assertFormError( post, 'form', 'image', form.errors['image'])
         self.assertFalse(Post.objects.all().exists())
 
     def tearDown(self):
@@ -231,13 +252,18 @@ class TestFollows(TestCase):
         self.post = Post.objects.create(
             text='First', group=self.group, author=self.user
         )
+
+    def test_follow(self):
         self.client2.get(
             reverse('profile_follow', args=(self.user.username,))
         )
-
-    def test_follow_unfollow(self):
         is_follow = Follow.objects.get(user=self.user2, author=self.user)
         self.assertTrue(is_follow)
+
+    def test_unfollow(self):
+        self.client2.get(
+            reverse('profile_follow', args=(self.user.username,))
+        )
         self.client2.get(
             reverse('profile_unfollow', args=(self.user.username,))
         )
@@ -245,6 +271,9 @@ class TestFollows(TestCase):
         self.assertNotIn(self.user2, followers)
 
     def test_follow_index(self):
+        self.client2.get(
+            reverse('profile_follow', args=(self.user.username,))
+        )
         response = self.client2.get(reverse('follow_index'))
         post_template = response.context['page'][0]
         self.assertEqual(post_template.text, self.post.text)
@@ -260,8 +289,8 @@ class TestFollows(TestCase):
         )
         self.client3.force_login(user3)
         response = self.client3.get(reverse('follow_index'))
-        with self.assertRaises(IndexError):
-            response.context['page'][0]
+        posts_count = len(response.context['page'])
+        self.assertEqual(posts_count, 0)
 
 
 class TestErrors(TestCase):

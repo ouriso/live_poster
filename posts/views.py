@@ -9,12 +9,13 @@ from django.urls import reverse
 from .forms import CommentForm, PostForm
 from .models import Follow, Group, Post
 
-
 User = get_user_model()
 
 
 def index(request):
-    post_list = Post.objects.all()
+    post_list = Post.objects.select_related(
+        'author', 'group'
+    )
     return paginator_render(request, 'index.html', {}, post_list)
 
 
@@ -47,9 +48,7 @@ def new_post(request):
 def profile(request, username):
     author = get_object_or_404(get_user_model(), username=username)
     posts = author.posts.all()
-    following = False
-    if request.user.is_authenticated:
-        following = True if request.user.follower.filter(author=author) else False
+    following = is_following(request.user, author)
     template = 'profile.html'
     context = {
         'following': following,
@@ -61,13 +60,22 @@ def profile(request, username):
 def post_view(request, username, post_id):
     post = get_object_or_404(Post, author__username=username, pk=post_id)
     comments = post.comments.all()
+    following = is_following(request.user, post.author)
     form = CommentForm(request.POST)
     context = {
         'post': post,
+        'following': following,
         'form': form,
         'comments': comments,
     }
     return paginator_render(request, 'post.html', context, comments)
+
+
+def is_following(user, author):
+    following = False
+    if user.is_authenticated:
+        following = True if user.follower.filter(author=author) else False
+    return following
 
 
 def post_edit(request, username, post_id):
@@ -114,8 +122,11 @@ def add_comment(request, username, post_id):
 
 @login_required
 def follow_index(request):
-    subscriptions = request.user.follower.values('author')
-    posts = Post.objects.filter(author__in=subscriptions).distinct()
+    posts = Post.objects.select_related(
+        'author', 'group'
+    ).filter(
+        author__following__user=request.user
+    )
     return paginator_render(request, 'follow.html', {}, posts)
 
 
@@ -123,9 +134,7 @@ def follow_index(request):
 def profile_follow(request, username):
     follower = request.user
     following = get_object_or_404(User, username=username)
-    object_exists = Follow.objects.filter(user=follower, author=following)
-    if not username == follower.username and not object_exists:
-        Follow.objects.create(user=follower, author=following)
+    Follow.objects.get_or_create(author=following, user=follower)
     return redirect(reverse('profile', args=(username,)))
 
 

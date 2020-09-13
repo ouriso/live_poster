@@ -10,9 +10,10 @@
                 <!-- Пост -->  
                 {% include 'include/post_item.html' with post=post %}
             </div>
+            <div class="col-8 ml-auto">
+                {% include 'include/comments.html'  with form=form page=page %}
+            </div>
         </div>
-        <div class="col-8 ml-auto">
-            {% include 'include/comments.html'  with form=form page=page %}
-        </div>
+
     </main>
 {% endblock %}
