@@ -10,167 +10,175 @@ from .models import Comment, Follow, Group, Post
 User = get_user_model()
 
 
-class TestPosts(TestCase):
-    def setUp(self):
+class HelperTest():
+    def setInit(self):
         self.client = Client()
         self.client2 = Client()
-        self.user = User.objects.create_user(
+        self.user_jerry = User.objects.create_user(
             first_name='Jerry',
             last_name='Mouse',
             username='jerry',
             email='jerry@disney.com',
             password='A12345a!'
         )
-        self.client.force_login(self.user)
-        self.group = Group.objects.create(
-            title='Cats',
-            slug='cats',
-            description='Only for cats'
-        )
-        self.group2 = Group.objects.create(
-            title='Antirats',
-            slug='antirats',
-            description='For rats haters'
-        )
-        self.context = {
-            'group_pk': self.group.pk,
-            'text': 'Lets go!',
-        }
-        self.context2 = {
-            'group_pk': self.group2.pk,
-            'text': 'Ohhhh, nooooo!',
-        }
-
-    def test_profile_exist(self):
-        response = self.client.get(reverse('profile', args=('jerry',)))
-        self.assertEqual(response.status_code, 200)
-
-    def test_post_auth(self):
-        response = self.create_post(self.client)
-        post = Post.objects.get(
-            pk=1,
-            text=self.context['text'],
-            group=self.context['group_pk']
-        )
-        self.assertTrue(post)
-
-    def test_post_not_auth(self):
-        posts_before = Post.objects.all().count()
-        response = self.create_post(self.client2)
-        posts_after = Post.objects.all().count()
-        self.assertEqual(posts_after, posts_before)
-
-    def test_group(self):
-        response = self.client.get(reverse('group', args=('cats',)))
-        self.assertEqual(response.status_code, 200)
-
-    def test_post_exist(self):
-        post = Post.objects.create(
-            text=self.context['text'],
-            author=User.objects.get(username='jerry'),
-            group=self.group
-        )
-        self.response_asserts('cats', self.context)
-
-    def test_wrong_user(self):
-        post = self.create_post(self.client)
-        user2 = User.objects.create(
+        self.user_tom = User.objects.create_user(
             first_name='Tom',
             last_name='Cat',
             username='tom',
             email='tom@disney.com',
             password='A12345a!'
         )
-        self.client2.force_login(user2)
-        url = reverse('post_edit', args=('jerry', 1,))
-        post_upd = self.client2.post(url, self.context2)
-        post = Post.objects.get(pk=1)
-        self.assertEqual(post.text, self.context['text'])
-        self.assertEqual(post.group.pk, self.context['group_pk'])
-
-    def test_post_edit(self):
-        post = self.create_post(self.client)
-        url = reverse('post_edit', args=('jerry', 1,))
-        post_upd = self.client.post(url, self.context2)
-        self.response_asserts('antirats', self.context2)
-
-    def response_asserts(self, group, context):
-        responses = (
-            self.client.get(reverse('index')),
-            self.client.get(reverse('group', args=(group,))),
-            self.client.get(reverse('profile', args=('jerry',))),
+        self.client.force_login(self.user_jerry)
+        self.group_cats = Group.objects.create(
+            title='Cats',
+            slug='cats',
+            description='Only for cats'
         )
+        self.group_dogs = Group.objects.create(
+            title='Dogs',
+            slug='dogs',
+        )
+        self.text_post = 'Lets go!'
+        self.text_post_upd = 'Atack! I say, atack!'
+
+    def create_post(self, image=None):
+        return Post.objects.create(
+            text=self.text_post,
+            author=self.user_jerry,
+            group=self.group_cats,
+            image=image
+        )
+
+    def get_responses(self, username, group):
+        return (
+            self.client.get(reverse('index')),
+            self.client.get(reverse('group', args=(group.slug,))),
+            self.client.get(reverse('profile', args=(username,))),
+        )
+
+    def assert_responses(self, responses, text, group):
         for response in responses:
             post_template = response.context['page'][0]
-            self.assertEqual(post_template.text, context['text'])
-            self.assertEqual(post_template.group.pk, context['group_pk'])
+            self.assertEqual(post_template.text, text)
+            self.assertEqual(post_template.group.pk, group.pk)
 
-    def test_comments_auth(self):
-        post = self.create_post(self.client)
-        arg = (self.user.username, 1)
-        url = reverse('add_comment', args=arg)
-        text = 'You shall not pass!!!'
-        response = self.client.post(url, {'text': text})
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(Comment.objects.exists())
 
-    def test_comments_not_auth(self):
-        post = self.create_post(self.client)
-        arg = (self.user.username, 1)
-        url = reverse('add_comment', args=arg)
-        comment = self.client2.post(url, {'text': self.context2['text']})
-        self.assertFalse(Comment.objects.all().exists())
+class TestPosts(TestCase, HelperTest):
+    def setUp(self):
+        self.setInit()
 
-    def test_comments_on_page(self):
-        post = Post.objects.create(
-            text=self.context['text'],
-            author=self.user,
-            group=self.group
+    def test_profile_exist(self):
+        response = self.client.get(
+            reverse('profile', args=(self.user_jerry,))
         )
-        text = 'You shall not pass!!!'
-        Comment.objects.create(
-            text=text,
-            author=self.user,
-            post=post
-        )
-        arg = (self.user.username, 1)
-        response = self.client.get(reverse('post', args=arg))
         self.assertEqual(response.status_code, 200)
-        post_template = response.context['page'][0]
-        self.assertEqual(post_template.text, text)
+
+    def test_post_auth(self):
+        self.client.post(
+            reverse('new_post'),
+            {'text': self.text_post, 'group': self.group_cats.pk},
+            follow=True
+        )
+        post = Post.objects.get(
+            pk=1,
+            text=self.text_post,
+            group=self.group_cats.pk
+        )
+        self.assertTrue(post)
+
+    def test_post_not_auth(self):
+        posts_before = Post.objects.all().count()
+        context = {
+            'text': self.text_post,
+            'group': self.group_cats.pk,
+        }
+        response = self.client2.post(
+            reverse('new_post'), context
+        )
+        posts_after = Post.objects.all().count()
+        self.assertEqual(posts_after, posts_before)
+
+    def test_group(self):
+        response = self.client.get(
+            reverse('group', args=(self.group_cats.slug,))
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_post_exist(self):
+        post = self.create_post()
+        responses = self.get_responses(self.user_jerry, self.group_cats)
+        self.assert_responses(responses, self.text_post, self.group_cats)
+
+    def test_post_edit(self):
+        post = self.create_post()
+        post_edit_url = reverse('post_edit', args=(self.user_jerry, post.pk))
+        self.client.post(
+            post_edit_url,
+            {'text': self.text_post_upd, 'group': self.group_dogs.pk}
+        )
+        responses = self.get_responses(self.user_jerry, self.group_dogs)
+        self.assert_responses(
+            responses, self.text_post_upd, self.group_dogs
+        )
+
+    def test_wrong_user(self):
+        post = self.create_post()
+        self.client2.force_login(self.user_tom)
+        post_edit_url = reverse('post_edit', args=(self.user_jerry, post.pk,))
+        self.client2.post(
+            post_edit_url,
+            {'text': self.text_post_upd, 'group': self.group_dogs.pk}
+        )
+        responses = self.get_responses(self.user_jerry, self.group_cats)
+        self.assert_responses(responses, self.text_post, self.group_cats)
 
     def test_cache_index(self):
         response_1 = self.client.get(reverse('index'))
-        post = Post.objects.create(
-            text='First', group=self.group, author=self.user
-        )
+        post = self.create_post()
         response_2 = self.client.get(reverse('index'))
         self.assertEqual(response_1.content, response_2.content)
         cache.clear()
         response_3 = self.client.get(reverse('index'))
         self.assertNotEqual(response_1.content, response_3.content)
-        self.assertEqual(response_3.context['page'][0].text, 'First')
-
-    def create_post(self, client):
-        return client.post(reverse('new_post'), self.context, follow=True)
+        self.assertEqual(response_3.context['page'][0].text, self.text_post)
 
 
-class TestImages(TestCase):
+class TestComments(TestCase, HelperTest):
     def setUp(self):
-        self.client = Client()
-        self.user = User.objects.create_user(
-            first_name='Jerry',
-            last_name='Mouse',
-            username='jerry',
-            email='jerry@disney.com',
-            password='A12345a!'
+        self.setInit()
+        self.post = self.create_post()
+        self.text = 'You shall not pass!!!'
+
+    def test_comments_auth(self):
+        arg = (self.user_jerry, self.post.pk)
+        add_comment_url = reverse('add_comment', args=arg)
+
+        response = self.client.post(add_comment_url, {'text': self.text})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Comment.objects.exists())
+
+    def test_comments_not_auth(self):
+        arg = (self.user_jerry, self.post.pk)
+        add_comment_url = reverse('add_comment', args=arg)
+        comment = self.client2.post(add_comment_url, {'text': self.text})
+        self.assertFalse(Comment.objects.all().exists())
+
+    def test_comments_on_page(self):
+        arg = (self.user_jerry, self.post.pk)
+        Comment.objects.create(
+            text=self.text,
+            author=self.user_jerry,
+            post=self.post
         )
-        self.client.force_login(self.user)
-        self.group = Group.objects.create(
-            title='Cats',
-            slug='cats',
-            description='Only for cats'
-        )
+        response = self.client.get(reverse('post', args=arg))
+        self.assertEqual(response.status_code, 200)
+        post_template = response.context['page'][0]
+        self.assertEqual(post_template.text, self.text)
+
+
+class TestImages(TestCase, HelperTest):
+    def setUp(self):
+        self.setInit()
         self.small_gif = (
             b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x00\x00\x00\x21\xf9\x04'
             b'\x01\x0a\x00\x01\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02'
@@ -181,28 +189,15 @@ class TestImages(TestCase):
         )
 
     def test_img_post(self):
-        post = self.client.post(
-            reverse('new_post'),
-            {'text': 'post with image', 'image': self.uploaded}
-        )
-        arg = (self.user.username, 1)
+        post = self.create_post(self.uploaded)
+        arg = (self.user_jerry, post.pk)
         response = self.client.get(reverse('post', args=arg))
         self.assertContains(response, '<img class="card-img"')
 
     def test_img_pages(self):
-        post = Post.objects.create(
-            author=self.user,
-            text='post with image',
-            group=self.group,
-            image=self.uploaded
-        )
-        links = (
-            reverse('index'),
-            reverse('group', args=(post.group.slug,)),
-            reverse('profile', args=(post.author.username,)),
-        )
-        for link in links:
-            response = self.client.get(link)
+        post = self.create_post(self.uploaded)
+        responses = self.get_responses(self.user_jerry, self.group_cats)
+        for response in responses:
             self.assertContains(response, '<img class="card-img"')
 
     def test_img_wrong(self):
@@ -216,63 +211,42 @@ class TestImages(TestCase):
             }
         )
         form = post.context['form']
-        self.assertFormError( post, 'form', 'image', form.errors['image'])
+        self.assertFormError(post, 'form', 'image', form.errors['image'])
         self.assertFalse(Post.objects.all().exists())
 
     def tearDown(self):
         Post.objects.all().delete()
 
 
-class TestFollows(TestCase):
+class TestFollows(TestCase, HelperTest):
     def setUp(self):
-        self.client = Client()
-        self.client2 = Client()
-        self.client3 = Client()
-        self.user = User.objects.create_user(
-            first_name='Jerry',
-            last_name='Mouse',
-            username='jerry',
-            email='jerry@disney.com',
-            password='A12345a!'
-        )
-        self.user2 = User.objects.create_user(
-            first_name='Tom',
-            last_name='Cat',
-            username='tom',
-            email='tom@disney.com',
-            password='A12345a!'
-        )
-        self.client.force_login(self.user)
-        self.client2.force_login(self.user2)
-        self.group = Group.objects.create(
-            title='Cats',
-            slug='cats',
-            description='Only for cats'
-        )
-        self.post = Post.objects.create(
-            text='First', group=self.group, author=self.user
-        )
+        self.setInit()
+
+        self.client2.force_login(self.user_tom)
+        self.post = self.create_post()
 
     def test_follow(self):
         self.client2.get(
-            reverse('profile_follow', args=(self.user.username,))
+            reverse('profile_follow', args=(self.user_jerry,))
         )
-        is_follow = Follow.objects.get(user=self.user2, author=self.user)
+        is_follow = Follow.objects.get(
+            user=self.user_tom, author=self.user_jerry
+        )
         self.assertTrue(is_follow)
 
     def test_unfollow(self):
         self.client2.get(
-            reverse('profile_follow', args=(self.user.username,))
+            reverse('profile_follow', args=(self.user_jerry,))
         )
         self.client2.get(
-            reverse('profile_unfollow', args=(self.user.username,))
+            reverse('profile_unfollow', args=(self.user_jerry,))
         )
         followers = Follow.objects.all().values_list('user', flat=True)
-        self.assertNotIn(self.user2, followers)
+        self.assertNotIn(self.user_tom, followers)
 
     def test_follow_index(self):
         self.client2.get(
-            reverse('profile_follow', args=(self.user.username,))
+            reverse('profile_follow', args=(self.user_jerry,))
         )
         response = self.client2.get(reverse('follow_index'))
         post_template = response.context['page'][0]
@@ -280,15 +254,7 @@ class TestFollows(TestCase):
         self.assertEqual(post_template.group.pk, self.post.group.pk)
 
     def test_not_follow_index(self):
-        user3 = User.objects.create_user(
-            first_name='Rex',
-            last_name='Dog',
-            username='rex',
-            email='rex@disney.com',
-            password='A12345a!'
-        )
-        self.client3.force_login(user3)
-        response = self.client3.get(reverse('follow_index'))
+        response = self.client2.get(reverse('follow_index'))
         posts_count = len(response.context['page'])
         self.assertEqual(posts_count, 0)
 
