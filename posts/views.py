@@ -80,11 +80,9 @@ def is_following(user, author):
 
 def post_edit(request, username, post_id):
     post = get_object_or_404(Post, author__username=username, pk=post_id)
-    url = reverse(
-        'post', kwargs={'username': username, 'post_id': post_id}
-    )
+    url = redirect('post', username, post_id)
     if not request.user == post.author:
-        return redirect(url)
+        return url
 
     form = PostForm(
         request.POST or None,
@@ -99,15 +97,15 @@ def post_edit(request, username, post_id):
 
     if form.is_valid():
         form.save()
-        return redirect(url)
+        return url
     return render(request, 'new.html', context)
 
 
 @login_required
 def add_comment(request, username, post_id):
-    url = reverse('post', args=(username, post_id))
+    url = redirect('post', username, post_id)
     if not request.POST:
-        return redirect(url)
+        return url
     post = get_object_or_404(Post, author__username=username, pk=post_id)
     form = CommentForm(request.POST)
     context = {'form': form}
@@ -116,7 +114,7 @@ def add_comment(request, username, post_id):
         form_commit.post = post
         form_commit.author = request.user
         form_commit.save()
-        return redirect(url)
+        return url
     return render(request, 'post.html', context)
 
 
@@ -136,7 +134,7 @@ def profile_follow(request, username):
     following = get_object_or_404(User, username=username)
     if not username == follower.username:
         Follow.objects.get_or_create(author=following, user=follower)
-    return redirect(reverse('profile', args=(username,)))
+    return redirect('profile', username)
 
 
 @login_required
@@ -145,7 +143,7 @@ def profile_unfollow(request, username):
     following = get_object_or_404(User, username=username)
     object_exists = Follow.objects.filter(user=follower, author=following)
     object_exists.delete()
-    return redirect(reverse('profile', args=(username,)))
+    return redirect('profile', username)
 
 
 def paginator_render(request, template, context, queryset, num_items=10):

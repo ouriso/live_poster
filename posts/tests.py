@@ -154,8 +154,10 @@ class TestComments(TestCase, HelperTest):
         add_comment_url = reverse('add_comment', args=arg)
 
         response = self.client.post(add_comment_url, {'text': self.text})
+        comment = Comment.objects.all()
         self.assertEqual(response.status_code, 302)
-        self.assertTrue(Comment.objects.exists())
+        self.assertEqual(comment.count(), 1)
+        self.assertTrue(comment.get(text=self.text, author=self.user_jerry))
 
     def test_comments_not_auth(self):
         arg = (self.user_jerry, self.post.pk)
@@ -211,7 +213,7 @@ class TestImages(TestCase, HelperTest):
             }
         )
         form = post.context['form']
-        self.assertFormError(post, 'form', 'image', form.errors['image'])
+        self.assertFalse(form.is_valid())
         self.assertFalse(Post.objects.all().exists())
 
     def tearDown(self):
@@ -229,10 +231,9 @@ class TestFollows(TestCase, HelperTest):
         self.client2.get(
             reverse('profile_follow', args=(self.user_jerry,))
         )
-        is_follow = Follow.objects.get(
-            user=self.user_tom, author=self.user_jerry
-        )
-        self.assertTrue(is_follow)
+        is_follow = Follow.objects.get(pk=1)
+        self.assertEqual(is_follow.user, self.user_tom)
+        self.assertEqual(is_follow.author, self.user_jerry)
 
     def test_unfollow(self):
         self.client2.get(
