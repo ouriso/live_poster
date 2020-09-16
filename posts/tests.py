@@ -154,10 +154,10 @@ class TestComments(TestCase, HelperTest):
         add_comment_url = reverse('add_comment', args=arg)
 
         response = self.client.post(add_comment_url, {'text': self.text})
-        comment = Comment.objects.all()
+        comment = Comment.objects.first()
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(comment.count(), 1)
-        self.assertTrue(comment.get(text=self.text, author=self.user_jerry))
+        self.assertEqual(comment.text, self.text)
+        self.assertEqual(comment.author, self.user_jerry)
 
     def test_comments_not_auth(self):
         arg = (self.user_jerry, self.post.pk)
@@ -213,7 +213,16 @@ class TestImages(TestCase, HelperTest):
             }
         )
         form = post.context['form']
+        error_text = ("Формат файлов 'txt' не поддерживается. "
+            "Поддерживаемые форматы файлов: 'bmp, dib, gif, tif, tiff, "
+            "jfif, jpe, jpg, jpeg, pbm, pgm, ppm, pnm, png, apng, blp, bufr, "
+            "cur, pcx, dcx, dds, ps, eps, fit, fits, fli, flc, ftc, ftu, gbr, "
+            "grib, h5, hdf, jp2, j2k, jpc, jpf, jpx, j2c, icns, ico, im, iim, "
+            "mpg, mpeg, mpo, msp, palm, pcd, pdf, pxr, psd, bw, rgb, rgba, sgi, "
+            "ras, tga, icb, vda, vst, webp, wmf, emf, xbm, xpm'."
+        )
         self.assertFalse(form.is_valid())
+        self.assertFormError(post, 'form', 'image', error_text)
         self.assertFalse(Post.objects.all().exists())
 
     def tearDown(self):
